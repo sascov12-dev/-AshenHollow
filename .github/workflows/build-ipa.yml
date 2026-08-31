@@ -1,1 +1,71 @@
+name: Build Ashen Hollow IPA
 
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf build
+          mkdir -p build/Payload/AshenHollow.app
+
+      - name: Compile Ashen Hollow
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          APP="build/Payload/AshenHollow.app"
+
+          echo "Swift files:"
+          find Sources -maxdepth 1 -name '*.swift' -print | sort
+
+          xcrun swiftc \
+            -parse-as-library \
+            -target arm64-apple-ios15.0 \
+            -sdk "$SDK" \
+            -O \
+            -framework Foundation \
+            -framework SwiftUI \
+            -framework UIKit \
+            -framework SpriteKit \
+            Sources/*.swift \
+            -o "$APP/AshenHollow"
+
+          chmod +x "$APP/AshenHollow"
+          cp Info.plist "$APP/Info.plist"
+
+          test -f "$APP/AshenHollow"
+          test -f "$APP/Info.plist"
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd build
+          zip -qry AshenHollow-unsigned.ipa Payload
+
+          test -f AshenHollow-unsigned.ipa
+          ls -lh AshenHollow-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AshenHollow-unsigned-ipa
+          path: build/AshenHollow-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
