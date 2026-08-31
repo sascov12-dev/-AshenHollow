@@ -338,13 +338,13 @@ final class GameScene: SKScene {
         configureButton(rightButton)
         configureButton(jumpButton)
 
-        leftArrow.text = "â¹"
+        leftArrow.text = "‹"
         leftArrow.fontSize = 50
         leftArrow.fontColor = UIColor(white: 0.94, alpha: 0.9)
         leftArrow.verticalAlignmentMode = .center
         leftArrow.horizontalAlignmentMode = .center
 
-        rightArrow.text = "âº"
+        rightArrow.text = "›"
         rightArrow.fontSize = 50
         rightArrow.fontColor = UIColor(white: 0.94, alpha: 0.9)
         rightArrow.verticalAlignmentMode = .center
