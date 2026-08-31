@@ -101,6 +101,9 @@ final class GameScene: SKScene {
         buildHUD()
         layoutHUD()
 
+        // Give the body one physics frame to settle, but also seed a short
+        // coyote window so JUMP works immediately after the scene appears.
+        coyoteTimer = coyoteDuration
         updateGroundedState()
     }
 
@@ -353,7 +356,7 @@ final class GameScene: SKScene {
         jumpLabel.verticalAlignmentMode = .center
         jumpLabel.horizontalAlignmentMode = .center
 
-        buildLabel.text = "PHYSICS JUMP V4"
+        buildLabel.text = "PHYSICS JUMP V5"
         buildLabel.fontSize = 12
         buildLabel.fontColor = UIColor(white: 1, alpha: 0.72)
         buildLabel.horizontalAlignmentMode = .center
@@ -421,7 +424,7 @@ final class GameScene: SKScene {
                 rightTouches.insert(id)
                 animateButton(rightButton, pressed: true)
 
-            } else if isInside(point, button: jumpButton, radius: 84) {
+            } else if isInside(point, button: jumpButton, radius: 120) {
                 jumpTouches.insert(id)
                 jumpHeld = true
                 didCutJump = false
@@ -625,15 +628,20 @@ final class GameScene: SKScene {
 
     private func tryConsumeJump() {
         guard let body = player.physicsBody else { return }
-
         guard jumpBufferTimer > 0 else { return }
 
+        // Refresh the ground state at the exact moment JUMP is requested.
+        // This avoids relying on a stale frame-based grounded flag.
+        let standingOnSurface = isStandingOnSurface()
+
         let canJump =
+            standingOnSurface ||
             isGrounded ||
             coyoteTimer > 0
 
         guard canJump else { return }
 
+        // SpriteKit owns the player's position. We only change velocity.
         body.velocity = CGVector(
             dx: body.velocity.dx,
             dy: jumpVelocity
@@ -649,52 +657,55 @@ final class GameScene: SKScene {
 
     // MARK: - Ground detection
 
-    private func updateGroundedState() {
-        guard let body = player.physicsBody else { return }
+    private func isStandingOnSurface() -> Bool {
+        guard let body = player.physicsBody else { return false }
 
-        let halfWidth: CGFloat = 18
+        // Never become grounded while clearly moving upward.
+        if body.velocity.dy > 45 {
+            return false
+        }
+
+        // Probe a thin rectangle directly under the player's feet.
+        // SKPhysicsWorld queries are in scene coordinates, so this does
+        // not depend on SKShapeNode.frame or platform visual geometry.
+        let halfWidth: CGFloat = 15
         let halfHeight: CGFloat = 30
 
-        let left =
-            player.position.x - halfWidth
+        let feetY = player.position.y - halfHeight
 
-        let right =
-            player.position.x + halfWidth
+        let probe = CGRect(
+            x: player.position.x - halfWidth,
+            y: feetY - 9,
+            width: halfWidth * 2,
+            height: 14
+        )
 
-        let bottom =
-            player.position.y - halfHeight
+        var foundWorld = false
 
-        var grounded = false
-
-        // Only consider ground while nearly stationary vertically
-        // or descending.
-        if body.velocity.dy <= 35 {
-            for platform in platforms {
-                let rect = platform.frame
-
-                let overlapsX =
-                    right > rect.minX + 3 &&
-                    left < rect.maxX - 3
-
-                guard overlapsX else { continue }
-
-                let distance =
-                    bottom - rect.maxY
-
-                if distance >= -3 &&
-                   distance <= 7 {
-                    grounded = true
-                    break
-                }
+        physicsWorld.enumerateBodies(in: probe) { physicsBody, stop in
+            if physicsBody.categoryBitMask & PhysicsCategory.world != 0 {
+                foundWorld = true
+                stop.pointee = true
             }
         }
 
+        return foundWorld
+    }
+
+    private func updateGroundedState() {
+        let grounded = isStandingOnSurface()
+
         if grounded && !isGrounded {
             isGrounded = true
+            coyoteTimer = coyoteDuration
             didCutJump = false
             playLandingAnimation()
 
-        } else if !grounded {
+        } else if grounded {
+            isGrounded = true
+            coyoteTimer = coyoteDuration
+
+        } else {
             isGrounded = false
         }
     }
